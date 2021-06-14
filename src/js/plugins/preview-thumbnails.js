@@ -113,19 +113,23 @@ class PreviewThumbnails {
       return;
     }
 
-    this.getThumbnails().then(() => {
-      if (!this.enabled) {
-        return;
-      }
+    try {
+      this.getThumbnails().then(() => {
+        if (!this.enabled) {
+          return;
+        }
 
-      // Render DOM elements
-      this.render();
+        // Render DOM elements
+        this.render();
 
-      // Check to see if thumb container size was specified manually in CSS
-      this.determineContainerAutoSizing();
+        // Check to see if thumb container size was specified manually in CSS
+        this.determineContainerAutoSizing();
 
-      this.loaded = true;
-    });
+        this.loaded = true;
+      });
+    } catch (error) {
+      console.log({ error });
+    }
   };
 
   // Download VTT files and parse them
@@ -218,29 +222,31 @@ class PreviewThumbnails {
       return;
     }
 
-    if (event.type === 'touchmove') {
-      // Calculate seek hover position as approx video seconds
-      this.seekTime = this.player.media.duration * (this.player.elements.inputs.seek.value / 100);
-    } else {
-      // Calculate seek hover position as approx video seconds
-      const clientRect = this.player.elements.progress.getBoundingClientRect();
-      const percentage = (100 / clientRect.width) * (event.pageX - clientRect.left);
-      this.seekTime = this.player.media.duration * (percentage / 100);
+    if (this?.player?.elements) {
+      if (event.type === 'touchmove') {
+        // Calculate seek hover position as approx video seconds
+        this.seekTime = this.player.media.duration * (this.player.elements.inputs.seek.value / 100);
+      } else {
+        // Calculate seek hover position as approx video seconds
+        const clientRect = this.player.elements.progress.getBoundingClientRect();
+        const percentage = (100 / clientRect.width) * (event.pageX - clientRect.left);
+        this.seekTime = this.player.media.duration * (percentage / 100);
 
-      if (this.seekTime < 0) {
-        // The mousemove fires for 10+px out to the left
-        this.seekTime = 0;
+        if (this.seekTime < 0) {
+          // The mousemove fires for 10+px out to the left
+          this.seekTime = 0;
+        }
+
+        if (this.seekTime > this.player.media.duration - 1) {
+          // Took 1 second off the duration for safety, because different players can disagree on the real duration of a video
+          this.seekTime = this.player.media.duration - 1;
+        }
+
+        this.mousePosX = event.pageX;
+
+        // Set time text inside image container
+        this.elements.thumb.time.innerText = formatTime(this.seekTime);
       }
-
-      if (this.seekTime > this.player.media.duration - 1) {
-        // Took 1 second off the duration for safety, because different players can disagree on the real duration of a video
-        this.seekTime = this.player.media.duration - 1;
-      }
-
-      this.mousePosX = event.pageX;
-
-      // Set time text inside image container
-      this.elements.thumb.time.innerText = formatTime(this.seekTime);
     }
 
     // Download and show image
@@ -328,9 +334,11 @@ class PreviewThumbnails {
 
     this.elements.thumb.container.appendChild(timeContainer);
 
-    // Inject the whole thumb
-    if (is.element(this.player.elements.progress)) {
-      this.player.elements.progress.appendChild(this.elements.thumb.container);
+    if (this?.player?.elements) {
+      // Inject the whole thumb
+      if (is.element(this.player.elements.progress)) {
+        this.player.elements.progress.appendChild(this.elements.thumb.container);
+      }
     }
 
     // Create HTML element: plyr__preview-scrubbing-container
@@ -656,24 +664,26 @@ class PreviewThumbnails {
   };
 
   setThumbContainerPos = () => {
-    const seekbarRect = this.player.elements.progress.getBoundingClientRect();
-    const plyrRect = this.player.elements.container.getBoundingClientRect();
-    const { container } = this.elements.thumb;
-    // Find the lowest and highest desired left-position, so we don't slide out the side of the video container
-    const minVal = plyrRect.left - seekbarRect.left + 10;
-    const maxVal = plyrRect.right - seekbarRect.left - container.clientWidth - 10;
-    // Set preview container position to: mousepos, minus seekbar.left, minus half of previewContainer.clientWidth
-    let previewPos = this.mousePosX - seekbarRect.left - container.clientWidth / 2;
+    if (this.player.elements) {
+      const seekbarRect = this.player.elements.progress.getBoundingClientRect();
+      const plyrRect = this.player.elements.container.getBoundingClientRect();
+      const { container } = this.elements.thumb;
+      // Find the lowest and highest desired left-position, so we don't slide out the side of the video container
+      const minVal = plyrRect.left - seekbarRect.left + 10;
+      const maxVal = plyrRect.right - seekbarRect.left - container.clientWidth - 10;
+      // Set preview container position to: mousepos, minus seekbar.left, minus half of previewContainer.clientWidth
+      let previewPos = this.mousePosX - seekbarRect.left - container.clientWidth / 2;
 
-    if (previewPos < minVal) {
-      previewPos = minVal;
+      if (previewPos < minVal) {
+        previewPos = minVal;
+      }
+
+      if (previewPos > maxVal) {
+        previewPos = maxVal;
+      }
+
+      container.style.left = `${previewPos}px`;
     }
-
-    if (previewPos > maxVal) {
-      previewPos = maxVal;
-    }
-
-    container.style.left = `${previewPos}px`;
   };
 
   // Can't use 100% width, in case the video is a different aspect ratio to the video container
